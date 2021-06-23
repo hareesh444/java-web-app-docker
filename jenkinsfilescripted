@@ -1,0 +1,32 @@
+node{
+ def buildnumber = BUILD_NUMBER
+stage('git'){
+    git credentialsId: '0dca82d7-9e96-4b00-92df-66e329ab2dfa', url: 'https://github.com/hareesh444/java-web-app-docker.git'
+}    
+stage(" Maven Clean Package"){
+      def mavenHome =  tool name: "maven-3.6.2", type: "maven"
+      def mavenCMD = "${mavenHome}/bin/mvn"
+      sh "${mavenCMD} clean package"
+      
+    } 
+stage('Build Docker Image'){
+        sh "docker build -t harirepo/java-web-app:${buildnumber} ." 
+    }
+stage("Deploying an image into dockerhub"){
+    withCredentials([string(credentialsId: 'dockerhub_paswd', variable: 'dockerhub_paswd')]) {
+    // secrete text for the password 
+          sh "docker login -u harirepo -p ${dockerhub_paswd}"
+        }
+        sh "docker push harirepo/java-web-app:${buildnumber}"
+}
+stage('Run Docker Image In Dev Server'){
+        
+        def dockerRun = "docker run  -d -p 8080:8080 --name java-web-app harirepo/java-web-app:${buildnumber}"
+sshagent(['ssh-agent_prvt_key']) {
+          sh 'ssh -o StrictHostKeyChecking=no ubuntu@10.20.1.204 docker stop java-web-app || true'
+          sh 'ssh  ubuntu@10.20.1.204 docker rm java-web-app || true'
+          sh 'ssh  ubuntu@10.20.1.204 docker rmi -f  $(docker images -q) || true'
+          sh "ssh  ubuntu@10.20.1.204 ${dockerRun}"
+}
+}
+}
